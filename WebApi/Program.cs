@@ -1,3 +1,7 @@
+using Npgsql;
+using WebApi.Repositories;
+using WebApi.Services;
+
 namespace WebApi
 {
     public class Program
@@ -5,22 +9,17 @@ namespace WebApi
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
-
-            // Add services to the container.
-
             builder.Services.AddControllers();
-
+            var connectionString = builder.Configuration.GetConnectionString("Default")
+                ?? throw new InvalidOperationException("Connection string 'Default' is not configured.");
+            builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
+            builder.Services.AddSingleton<PackageRepository>();
+            builder.Services.Configure<PlaygroundOptions>(builder.Configuration.GetSection("Playground"));
+            builder.Services.AddSingleton<PlaygroundService>();
             var app = builder.Build();
-
-            // Configure the HTTP request pipeline.
-
             app.UseHttpsRedirection();
-
             app.UseAuthorization();
-
-
             app.MapControllers();
-
             app.Run();
         }
     }

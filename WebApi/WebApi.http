@@ -1,6 +1,54 @@
 @WebApi_HostAddress = http://localhost:5214
 
-GET {{WebApi_HostAddress}}/
+# Get all packages
+GET {{WebApi_HostAddress}}/packages
 Accept: application/json
+
+###
+
+# Get a package by id
+GET {{WebApi_HostAddress}}/packages/00000000-0000-0000-0000-000000000000
+Accept: application/json
+
+###
+
+# Create a package
+POST {{WebApi_HostAddress}}/packages
+Content-Type: application/json
+
+{
+  "name": "Std",
+  "description": "Standard library for Rux",
+  "repository": "https://github.com/rux-lang/Std",
+  "license": "MIT"
+}
+
+###
+
+# Update a package
+PUT {{WebApi_HostAddress}}/packages/00000000-0000-0000-0000-000000000000
+Content-Type: application/json
+
+{
+  "name": "http",
+  "description": "HTTP client and server library for Rux",
+  "repository": "https://github.com/rux-lang/http",
+  "license": "Apache-2.0"
+}
+
+###
+
+# Delete a package
+DELETE {{WebApi_HostAddress}}/packages/00000000-0000-0000-0000-000000000000
+
+###
+
+# Run code in the playground
+POST {{WebApi_HostAddress}}/playground/run
+Content-Type: application/json
+
+{
+  "code": "import Std::Io::Print;\n\nfunc Main() -> int {\n    Print(\"Hello, Rux!\")\n}"
+}
 
 ###
