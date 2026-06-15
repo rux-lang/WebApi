@@ -1,4 +1,4 @@
-DROP TABLE IF EXISTS builds;
+DROP TABLE IF EXISTS workflows;
 DROP TABLE IF EXISTS packages;
 
 CREATE TABLE packages
@@ -11,21 +11,13 @@ CREATE TABLE packages
     created     timestamp with time zone NOT NULL
 );
 
-CREATE TABLE builds
+CREATE TABLE workflows
 (
-    id          uuid PRIMARY KEY,
-    package_id  uuid REFERENCES packages (id) ON DELETE SET NULL,
-    repository  character varying        NOT NULL,
-    run_id      bigint                   NOT NULL UNIQUE,
-    run_number  integer                  NOT NULL,
-    workflow    character varying        NOT NULL,
-    branch      character varying        NOT NULL,
-    commit      character varying        NOT NULL,
-    status      character varying        NOT NULL,
-    conclusion  character varying,
-    url         character varying        NOT NULL,
-    created     timestamp with time zone NOT NULL,
-    updated     timestamp with time zone NOT NULL
+    name              character varying PRIMARY KEY,
+    build_conclusion  character varying,
+    build_completed   timestamp with time zone,
+    test_conclusion   character varying,
+    test_completed    timestamp with time zone,
+    deploy_conclusion character varying,
+    deploy_completed  timestamp with time zone
 );
-
-CREATE INDEX builds_package_id_idx ON builds (package_id);

@@ -1,68 +1,62 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using WebApi.Models;
 using WebApi.Repositories;
 using WebApi.Services;
 
 namespace WebApi.Controllers
 {
     [ApiController]
-    [Route("webhooks/github")]
+    [Route("[controller]")]
     public class WebhooksController(
-        GitHubWebhookService webhookService,
-        BuildRepository builds,
-        ILogger<WebhooksController> logger) : ControllerBase
+        WorkflowRepository repository,
+        GitHubWebhookService webhookService) : ControllerBase
     {
+        private const string WorkflowJobEventName = "workflow_job";
+        private const string CompletedStatus = "completed";
+
+        private readonly WorkflowRepository repository = repository;
         private readonly GitHubWebhookService webhookService = webhookService;
-        private readonly BuildRepository builds = builds;
-        private readonly ILogger<WebhooksController> logger = logger;
 
-        [HttpPost]
-        public async Task<IActionResult> Receive(CancellationToken cancellationToken)
+        [HttpPost("github")]
+        public async Task<IActionResult> GitHub(CancellationToken cancellationToken)
         {
-            using var buffer = new MemoryStream();
-            await Request.Body.CopyToAsync(buffer, cancellationToken);
-            var payload = buffer.ToArray();
+            using var memory = new MemoryStream();
+            await Request.Body.CopyToAsync(memory, cancellationToken);
+            var payload = memory.ToArray();
 
-            var signature = Request.Headers["X-Hub-Signature-256"].ToString();
-            if (!webhookService.VerifySignature(payload, signature))
+            if (!webhookService.VerifySignature(payload, Request.Headers["X-Hub-Signature-256"]))
             {
                 return Unauthorized();
             }
 
-            var eventType = Request.Headers["X-GitHub-Event"].ToString();
-            if (eventType == "ping")
+            if (Request.Headers["X-GitHub-Event"] != WorkflowJobEventName)
             {
                 return Ok();
             }
-            if (eventType != "workflow_run")
-            {
-                // Acknowledge unhandled events so GitHub stops retrying them.
-                return NoContent();
-            }
 
-            JsonDocument document;
+            WorkflowJobEvent? payloadEvent;
             try
             {
-                document = JsonDocument.Parse(payload);
+                payloadEvent = JsonSerializer.Deserialize<WorkflowJobEvent>(payload);
             }
             catch (JsonException)
             {
-                return BadRequest("Invalid JSON payload.");
+                return BadRequest();
             }
 
-            using (document)
+            var job = payloadEvent?.WorkflowJob;
+            if (job is null
+                || job.Status != CompletedStatus
+                || string.IsNullOrEmpty(job.WorkflowName)
+                || string.IsNullOrEmpty(job.Name))
             {
-                var build = webhookService.ParseWorkflowRun(document.RootElement);
-                if (build is null)
-                {
-                    return BadRequest("Unsupported workflow_run payload.");
-                }
-                var stored = await builds.UpsertAsync(build);
-                logger.LogInformation(
-                    "Recorded build {RunId} for {Repository}: {Status}/{Conclusion}",
-                    stored.RunId, stored.Repository, stored.Status, stored.Conclusion);
-                return NoContent();
+                return Ok();
             }
+
+            await repository.UpsertJobAsync(
+                job.WorkflowName, job.Name, job.Conclusion, job.CompletedAt);
+            return Ok();
         }
     }
 }

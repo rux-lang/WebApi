@@ -23,7 +23,7 @@ namespace WebApi
                 ?? throw new InvalidOperationException("Connection string 'Default' is not configured.");
             builder.Services.AddSingleton(NpgsqlDataSource.Create(connectionString));
             builder.Services.AddSingleton<PackageRepository>();
-            builder.Services.AddSingleton<BuildRepository>();
+            builder.Services.AddSingleton<WorkflowRepository>();
             builder.Services.Configure<GitHubWebhookOptions>(
                 builder.Configuration.GetSection("GitHubWebhook"));
             builder.Services.AddSingleton<GitHubWebhookService>();
