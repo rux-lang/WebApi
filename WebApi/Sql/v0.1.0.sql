@@ -1,6 +1,3 @@
-DROP TABLE IF EXISTS workflows;
-DROP TABLE IF EXISTS packages;
-
 CREATE TABLE packages
 (
     id          uuid PRIMARY KEY,
