@@ -14,9 +14,7 @@ namespace WebApi.Repositories
             {
                 ["build"] = "build",
                 ["test"] = "test",
-                ["deploy"] = "deploy",
-                ["ci / Build"] = "build",
-                ["ci / Test"] = "test"
+                ["deploy"] = "deploy"
             };
 
         private readonly NpgsqlDataSource dataSource = dataSource;
