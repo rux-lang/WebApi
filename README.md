@@ -1,7 +1,8 @@
 # Web API
 
-[![Build](https://github.com/musicvano/WebApi/actions/workflows/build.yml/badge.svg)](https://github.com/musicvano/WebApi/actions/workflows/build.yml)
-[![Deploy](https://github.com/musicvano/WebApi/actions/workflows/deploy.yml/badge.svg)](https://github.com/musicvano/WebApi/actions/workflows/deploy.yml)
+[![Build](https://github.com/rux-lang/WebApi/actions/workflows/build.yml/badge.svg)](https://github.com/rux-lang/WebApi/actions/workflows/build.yml)
+[![Deploy](https://github.com/rux-lang/WebApi/actions/workflows/deploy.yml/badge.svg)](https://github.com/rux-lang/WebApi/actions/workflows/deploy.yml)
+[![Playground](https://github.com/rux-lang/WebApi/actions/workflows/playground.yml/badge.svg)](https://github.com/rux-lang/WebApi/actions/workflows/playground.yml)
 
 This repository contains source code for Web API https://api.rux-lang.dev.
 
@@ -54,27 +55,46 @@ A package is returned as:
 
 ### Playground
 
-| Method | Route             | Description                                         |
-| ------ | ----------------- | --------------------------------------------------- |
-| `POST` | `/playground/run` | Compile and run a Rux snippet, returning its output |
+| Method | Route             | Description                                             |
+| ------ | ----------------- | ------------------------------------------------------- |
+| `POST` | `/playground/run` | Compile and run a Rux snippet, returning its output     |
+| `POST` | `/playground/asm` | Compile a Rux snippet and return its assembly listing   |
 
-Request body (`code` is limited to 4096 characters):
+Snippets run in a locked-down, network-isolated Docker sandbox. Both routes take the same body (`code` is limited to 4096 characters):
 
 ```json
 {
-  "code": "print(\"Hello, Rux\")"
+  "code": "import Std::Io::Print;\n\nfunc Main() -> int {\n\tPrint(\"Hello, Rux\");\n\treturn 0;\n}"
 }
 ```
 
-Response:
+`POST /playground/run` responds with:
 
 ```json
 {
+  "success": true,
   "stdout": "Hello, Rux\n",
   "stderr": "",
-  "exitCode": 0,
-  "timedOut": false,
-  "durationMs": 37
+  "error": null,
+  "duration_ms": 37
+}
+```
+
+`error` is set only for timeouts and infrastructure failures; compiler diagnostics are carried in `stderr`.
+
+`POST /playground/asm` responds with the assembly listing instead:
+
+```json
+{
+  "success": true,
+  "asm_user": "...",
+  "asm_full": "...",
+  "user_lines": 42,
+  "total_lines": 42,
+  "error": null,
+  "stdout": "",
+  "stderr": "",
+  "duration_ms": 37
 }
 ```
 

@@ -55,4 +55,4 @@ jobs:
           ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/deploy_key -p "${{ secrets.DEPLOY_PORT || '22' }}" \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "docker pull ${{ env.IMAGE }}:latest"
+            "DOCKER_HOST=unix:///run/user/1000/docker.sock docker pull ${{ env.IMAGE }}:latest"
