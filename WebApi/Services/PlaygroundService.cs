@@ -5,32 +5,100 @@ using WebApi.Models;
 
 namespace WebApi.Services
 {
-    public class PlaygroundService(IOptions<PlaygroundOptions> options)
+    public class PlaygroundService
     {
-        private readonly PlaygroundOptions options = options.Value;
+        private readonly PlaygroundOptions options;
+        private readonly SemaphoreSlim gate;
+        private readonly string workRoot;
+
+        public PlaygroundService(IOptions<PlaygroundOptions> options)
+        {
+            this.options = options.Value;
+            this.gate = new SemaphoreSlim(Math.Max(1, this.options.MaxConcurrency));
+            this.workRoot = ResolveWorkRoot(this.options.WorkRoot);
+        }
+
+        private static string ResolveWorkRoot(string configured)
+        {
+            if (string.IsNullOrWhiteSpace(configured))
+            {
+                return Path.Combine(Path.GetTempPath(), "rux-playground");
+            }
+            if (configured.StartsWith('~'))
+            {
+                var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                configured = home + configured[1..];
+            }
+            return configured;
+        }
 
         public async Task<RunResult> RunAsync(string code, CancellationToken cancellationToken)
         {
-            var workDir = Path.Combine(Path.GetTempPath(), "rux-playground", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(workDir);
+            var result = await ExecuteAsync(code, "run", cancellationToken);
+            return new RunResult
+            {
+                Success = result.Success,
+                Stdout = result.Stdout,
+                Stderr = result.Stderr,
+                Error = result.Error,
+                DurationMs = result.DurationMs
+            };
+        }
+
+        public async Task<AsmResult> DumpAsmAsync(string code, CancellationToken cancellationToken)
+        {
+            var result = await ExecuteAsync(code, "asm", cancellationToken);
+            // On success the assembly listing arrives on stdout. On failure the
+            // compiler diagnostics are in stderr, so leave the assembly empty.
+            var assembly = result.Success ? result.Stdout : "";
+            var lines = result.Success ? CountLines(assembly) : 0;
+            return new AsmResult
+            {
+                Success = result.Success,
+                AsmUser = assembly,
+                AsmFull = assembly,
+                UserLines = lines,
+                TotalLines = lines,
+                Error = result.Error,
+                Stdout = result.Success ? "" : result.Stdout,
+                Stderr = result.Stderr,
+                DurationMs = result.DurationMs
+            };
+        }
+
+        private async Task<ExecutionResult> ExecuteAsync(
+            string code, string mode, CancellationToken cancellationToken)
+        {
+            await gate.WaitAsync(cancellationToken);
             try
             {
-                await File.WriteAllTextAsync(Path.Combine(workDir, "Main.rux"), code, cancellationToken);
-                return await RunContainerAsync(workDir, cancellationToken);
+                var workDir = Path.Combine(workRoot, Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(workDir);
+                try
+                {
+                    await File.WriteAllTextAsync(
+                        Path.Combine(workDir, "Main.rux"), code, cancellationToken);
+                    return await RunContainerAsync(workDir, mode, cancellationToken);
+                }
+                finally
+                {
+                    try
+                    {
+                        Directory.Delete(workDir, true);
+                    }
+                    catch (IOException)
+                    {
+                    }
+                }
             }
             finally
             {
-                try
-                {
-                    Directory.Delete(workDir, true);
-                }
-                catch (IOException)
-                {
-                }
+                gate.Release();
             }
         }
 
-        private async Task<RunResult> RunContainerAsync(string workDir, CancellationToken cancellationToken)
+        private async Task<ExecutionResult> RunContainerAsync(
+            string workDir, string mode, CancellationToken cancellationToken)
         {
             var containerName = $"rux-playground-{Guid.NewGuid():N}";
             var startInfo = new ProcessStartInfo
@@ -41,21 +109,27 @@ namespace WebApi.Services
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            var memory = options.MemoryLimit;
             var arguments = new[]
             {
                 "run", "--rm",
                 "--name", containerName,
                 "--network", "none",
-                "--memory", options.MemoryLimit,
+                "--read-only",
+                "--tmpfs", "/tmp:rw,exec,size=64m",
+                "--memory", memory,
+                "--memory-swap", memory,
                 "--cpus", options.Cpus.ToString(CultureInfo.InvariantCulture),
+                "--pids-limit", options.PidsLimit.ToString(CultureInfo.InvariantCulture),
+                "--cap-drop", "ALL",
+                "--security-opt", "no-new-privileges",
+                "--ulimit", "fsize=8388608",
+                "--ulimit", "nofile=256",
                 "-v", $"{workDir}:/playground:ro",
-                options.Image
+                options.Image,
+                mode
             };
             foreach (var argument in arguments)
-            {
-                startInfo.ArgumentList.Add(argument);
-            }
-            foreach (var argument in options.Command.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             {
                 startInfo.ArgumentList.Add(argument);
             }
@@ -84,16 +158,41 @@ namespace WebApi.Services
             var stderr = await stderrTask;
             if (timedOut)
             {
-                stderr = $"Execution timed out after {options.TimeoutSeconds} seconds.";
+                return new ExecutionResult
+                {
+                    Success = false,
+                    Stdout = stdout,
+                    Stderr = "",
+                    Error = $"Execution timed out after {options.TimeoutSeconds} seconds.",
+                    DurationMs = stopwatch.ElapsedMilliseconds
+                };
             }
-            return new RunResult
+            return new ExecutionResult
             {
+                Success = process.ExitCode == 0,
                 Stdout = stdout,
                 Stderr = stderr,
-                ExitCode = timedOut ? -1 : process.ExitCode,
-                TimedOut = timedOut,
+                Error = null,
                 DurationMs = stopwatch.ElapsedMilliseconds
             };
+        }
+
+        private static int CountLines(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return 0;
+            }
+            var count = 1;
+            foreach (var ch in text)
+            {
+                if (ch == '\n')
+                {
+                    count++;
+                }
+            }
+            // A trailing newline does not start a new line.
+            return text.EndsWith('\n') ? count - 1 : count;
         }
 
         private static void KillProcess(Process process)
@@ -124,6 +223,19 @@ namespace WebApi.Services
             {
                 await process.WaitForExitAsync(CancellationToken.None);
             }
+        }
+
+        private sealed class ExecutionResult
+        {
+            public bool Success { get; init; }
+
+            public required string Stdout { get; init; }
+
+            public required string Stderr { get; init; }
+
+            public string? Error { get; init; }
+
+            public long DurationMs { get; init; }
         }
     }
 }

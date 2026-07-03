@@ -15,5 +15,11 @@ namespace WebApi.Controllers
         {
             return await playground.RunAsync(request.Code, cancellationToken);
         }
+
+        [HttpPost("asm")]
+        public async Task<ActionResult<AsmResult>> Asm(RunRequest request, CancellationToken cancellationToken)
+        {
+            return await playground.DumpAsmAsync(request.Code, cancellationToken);
+        }
     }
 }

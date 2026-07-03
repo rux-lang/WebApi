@@ -52,3 +52,13 @@ Content-Type: application/json
 }
 
 ###
+
+# Dump the generated assembly for playground code
+POST {{WebApi_HostAddress}}/playground/asm
+Content-Type: application/json
+
+{
+  "code": "import Std::Io::Print;\n\nfunc Main() -> int {\n    Print(\"Hello, Rux!\")\n}"
+}
+
+###
