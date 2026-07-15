@@ -18,14 +18,37 @@ namespace WebApi.Services
 
         private readonly HttpClient httpClient = httpClient;
 
-        public async Task<PackageMetadata> GetMetadataAsync(
+        public async Task<List<PackageMetadata>> GetMetadataAsync(
             string repositoryUrl, CancellationToken cancellationToken)
         {
             var (host, owner, repo) = ParseRepositoryUrl(repositoryUrl);
             var (defaultBranch, hostLicense) =
                 await GetRepositoryInfoAsync(host, owner, repo, cancellationToken);
-            var manifest = await GetManifestAsync(host, owner, repo, defaultBranch, cancellationToken);
-            var package = ParsePackageSection(manifest);
+            var rootManifest = await GetManifestAsync(
+                host, owner, repo, defaultBranch, "Rux.toml", cancellationToken);
+            var members = ParseWorkspaceMembers(rootManifest);
+            // All packages share the bare repository URL; the folder distinguishes
+            // members of a monorepo (empty for a package at the repository root).
+            var repository = $"https://{host}/{owner}/{repo}";
+            if (members.Count == 0)
+            {
+                var package = ParsePackageSection(rootManifest);
+                return [BuildPackageMetadata(package, repository, "", hostLicense)];
+            }
+            var packages = new List<PackageMetadata>(members.Count);
+            foreach (var member in members)
+            {
+                var manifest = await GetManifestAsync(
+                    host, owner, repo, defaultBranch, $"{member}/Rux.toml", cancellationToken);
+                var package = ParsePackageSection(manifest);
+                packages.Add(BuildPackageMetadata(package, repository, member, hostLicense));
+            }
+            return packages;
+        }
+
+        private static PackageMetadata BuildPackageMetadata(
+            Dictionary<string, string> package, string repository, string folder, string? hostLicense)
+        {
             if (!package.TryGetValue("Name", out var name) || string.IsNullOrWhiteSpace(name))
             {
                 throw new RepositoryException(
@@ -39,11 +62,7 @@ namespace WebApi.Services
                     "Add a license file to the repository or a License field to Rux.toml.");
             }
             package.TryGetValue("Description", out var description);
-            return new PackageMetadata(
-                name,
-                description ?? "",
-                $"https://{host}/{owner}/{repo}",
-                license);
+            return new PackageMetadata(name, description ?? "", repository, folder, license);
         }
 
         private static (string Host, string Owner, string Repo) ParseRepositoryUrl(string url)
@@ -101,25 +120,25 @@ namespace WebApi.Services
         }
 
         private async Task<string> GetManifestAsync(
-            string host, string owner, string repo, string branch,
+            string host, string owner, string repo, string branch, string path,
             CancellationToken cancellationToken)
         {
             var manifestUrl = host switch
             {
-                "github.com" => $"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/Rux.toml",
-                "gitlab.com" => $"https://gitlab.com/{owner}/{repo}/-/raw/{branch}/Rux.toml",
-                "bitbucket.org" => $"https://bitbucket.org/{owner}/{repo}/raw/{branch}/Rux.toml",
-                _ => $"https://codeberg.org/{owner}/{repo}/raw/branch/{branch}/Rux.toml"
+                "github.com" => $"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}",
+                "gitlab.com" => $"https://gitlab.com/{owner}/{repo}/-/raw/{branch}/{path}",
+                "bitbucket.org" => $"https://bitbucket.org/{owner}/{repo}/raw/{branch}/{path}",
+                _ => $"https://codeberg.org/{owner}/{repo}/raw/branch/{branch}/{path}"
             };
             using var response = await httpClient.GetAsync(manifestUrl, cancellationToken);
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                throw new RepositoryException("Rux.toml not found in the repository root.");
+                throw new RepositoryException($"{path} not found in the repository.");
             }
             if (!response.IsSuccessStatusCode)
             {
                 throw new RepositoryException(
-                    $"Failed to download Rux.toml with status {(int)response.StatusCode}.");
+                    $"Failed to download {path} with status {(int)response.StatusCode}.");
             }
             return await response.Content.ReadAsStringAsync(cancellationToken);
         }
@@ -171,6 +190,57 @@ namespace WebApi.Services
                 return licenses[0].GetString();
             }
             return null;
+        }
+
+        // Minimal TOML reader for the [Workspace] Packages array. Returns an empty list
+        // when the manifest has no [Workspace] section, which marks a single-package repo.
+        private static List<string> ParseWorkspaceMembers(string toml)
+        {
+            var members = new List<string>();
+            var inWorkspace = false;
+            var inMembers = false;
+            foreach (var rawLine in toml.Split('\n'))
+            {
+                var line = rawLine.Trim();
+                if (line.Length == 0 || line.StartsWith('#'))
+                {
+                    continue;
+                }
+                if (!inMembers && line.StartsWith('['))
+                {
+                    inWorkspace = line.StartsWith("[Workspace]");
+                    continue;
+                }
+                if (!inWorkspace)
+                {
+                    continue;
+                }
+                var content = line;
+                if (!inMembers)
+                {
+                    var separator = line.IndexOf('=');
+                    if (separator < 0 || line[..separator].Trim() != "Packages")
+                    {
+                        continue;
+                    }
+                    inMembers = true;
+                    content = line[(separator + 1)..];
+                }
+                var closed = content.Contains(']');
+                foreach (var raw in content.Trim('[', ']', ',', ' ').Split(','))
+                {
+                    var member = raw.Trim().Trim('"');
+                    if (member.Length > 0)
+                    {
+                        members.Add(member);
+                    }
+                }
+                if (closed)
+                {
+                    break;
+                }
+            }
+            return members;
         }
 
         // Minimal TOML reader for string keys of the [Package] section.

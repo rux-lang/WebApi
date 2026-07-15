@@ -10,6 +10,8 @@ namespace WebApi.Models
 
         public required string Repository { get; set; }
 
+        public required string Folder { get; set; }
+
         public required string License { get; set; }
 
         public DateTime Created { get; set; }

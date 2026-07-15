@@ -3,9 +3,11 @@ CREATE TABLE packages
     id          uuid PRIMARY KEY,
     name        character varying        NOT NULL UNIQUE,
     description character varying        NOT NULL,
-    repository  character varying        NOT NULL UNIQUE,
+    repository  character varying        NOT NULL,
+    folder      character varying        NOT NULL DEFAULT '',
     license     character varying        NOT NULL,
-    created     timestamp with time zone NOT NULL
+    created     timestamp with time zone NOT NULL,
+    UNIQUE (repository, folder)
 );
 
 CREATE TABLE workflows

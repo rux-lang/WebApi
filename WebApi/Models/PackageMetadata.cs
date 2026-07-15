@@ -4,5 +4,6 @@ namespace WebApi.Models
         string Name,
         string Description,
         string Repository,
+        string Folder,
         string License);
 }

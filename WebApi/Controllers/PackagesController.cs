@@ -46,13 +46,13 @@ namespace WebApi.Controllers
         }
 
         [HttpPost]
-        public async Task<ActionResult<Package>> Create(PackageRequest request, CancellationToken cancellationToken)
+        public async Task<ActionResult<List<Package>>> Create(PackageRequest request, CancellationToken cancellationToken)
         {
             if (!await VerifyTurnstileAsync(request.TurnstileToken, cancellationToken))
             {
                 return BadRequest("Human verification failed. Refresh the page and try again.");
             }
-            PackageMetadata metadata;
+            List<PackageMetadata> metadata;
             try
             {
                 metadata = await repositoryService.GetMetadataAsync(
@@ -70,24 +70,30 @@ namespace WebApi.Controllers
             {
                 return BadRequest("GitHub request timed out. Try again later.");
             }
-            var package = new Package
+            var created = new List<Package>();
+            foreach (var item in metadata)
             {
-                Id = Guid.CreateVersion7(),
-                Name = metadata.Name,
-                Description = metadata.Description,
-                Repository = metadata.Repository,
-                License = metadata.License,
-                Created = DateTime.UtcNow
-            };
-            try
-            {
-                await repository.CreateAsync(package);
+                var package = new Package
+                {
+                    Id = Guid.CreateVersion7(),
+                    Name = item.Name,
+                    Description = item.Description,
+                    Repository = item.Repository,
+                    Folder = item.Folder,
+                    License = item.License,
+                    Created = DateTime.UtcNow
+                };
+                try
+                {
+                    await repository.CreateAsync(package);
+                    created.Add(package);
+                }
+                catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+                {
+                    // Already registered (by name or repository) — skip and keep going.
+                }
             }
-            catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
-            {
-                return Conflict("A package with the same name or repository already exists.");
-            }
-            return CreatedAtAction(nameof(GetByName), new { name = package.Name }, package);
+            return Ok(created);
         }
 
         [HttpPut("{id:guid}")]
@@ -97,7 +103,7 @@ namespace WebApi.Controllers
             {
                 return BadRequest("Human verification failed. Refresh the page and try again.");
             }
-            PackageMetadata metadata;
+            List<PackageMetadata> metadata;
             try
             {
                 metadata = await repositoryService.GetMetadataAsync(
@@ -115,13 +121,21 @@ namespace WebApi.Controllers
             {
                 return BadRequest("GitHub request timed out. Try again later.");
             }
+            if (metadata.Count != 1)
+            {
+                return BadRequest(
+                    "A workspace repository maps to multiple packages and cannot update a single package. " +
+                    "Submit the repository with POST to register its packages.");
+            }
+            var item = metadata[0];
             var package = new Package
             {
                 Id = id,
-                Name = metadata.Name,
-                Description = metadata.Description,
-                Repository = metadata.Repository,
-                License = metadata.License
+                Name = item.Name,
+                Description = item.Description,
+                Repository = item.Repository,
+                Folder = item.Folder,
+                License = item.License
             };
             bool updated;
             try

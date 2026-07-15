@@ -3,17 +3,25 @@ using Microsoft.Extensions.Options;
 
 namespace WebApi.Services
 {
-    public class TurnstileService(HttpClient httpClient, IOptions<TurnstileOptions> options)
+    public class TurnstileService(
+        HttpClient httpClient, IOptions<TurnstileOptions> options, IHostEnvironment environment)
     {
         private const string VerifyUrl =
             "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
         private readonly HttpClient httpClient = httpClient;
         private readonly TurnstileOptions options = options.Value;
+        private readonly IHostEnvironment environment = environment;
 
         public async Task<bool> VerifyAsync(
             string token, string? remoteIp, CancellationToken cancellationToken)
         {
+            // Skip Cloudflare human verification in local development so the
+            // registry can be exercised without solving a Turnstile challenge.
+            if (environment.IsDevelopment())
+            {
+                return true;
+            }
             var fields = new Dictionary<string, string>
             {
                 ["secret"] = options.SecretKey,

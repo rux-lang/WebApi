@@ -5,7 +5,7 @@ namespace WebApi.Repositories
 {
     public class PackageRepository(NpgsqlDataSource dataSource)
     {
-        private const string Columns = "id, name, description, repository, license, created";
+        private const string Columns = "id, name, description, repository, folder, license, created";
 
         private readonly NpgsqlDataSource dataSource = dataSource;
 
@@ -51,12 +51,13 @@ namespace WebApi.Repositories
         public async Task CreateAsync(Package package)
         {
             await using var command = dataSource.CreateCommand(
-                "INSERT INTO packages (id, name, description, repository, license, created) " +
-                "VALUES ($1, $2, $3, $4, $5, $6)");
+                "INSERT INTO packages (id, name, description, repository, folder, license, created) " +
+                "VALUES ($1, $2, $3, $4, $5, $6, $7)");
             command.Parameters.AddWithValue(package.Id);
             command.Parameters.AddWithValue(package.Name);
             command.Parameters.AddWithValue(package.Description);
             command.Parameters.AddWithValue(package.Repository);
+            command.Parameters.AddWithValue(package.Folder);
             command.Parameters.AddWithValue(package.License);
             command.Parameters.AddWithValue(package.Created);
             await command.ExecuteNonQueryAsync();
@@ -65,12 +66,13 @@ namespace WebApi.Repositories
         public async Task<bool> UpdateAsync(Package package)
         {
             await using var command = dataSource.CreateCommand(
-                "UPDATE packages SET name = $2, description = $3, repository = $4, license = $5 " +
+                "UPDATE packages SET name = $2, description = $3, repository = $4, folder = $5, license = $6 " +
                 "WHERE id = $1");
             command.Parameters.AddWithValue(package.Id);
             command.Parameters.AddWithValue(package.Name);
             command.Parameters.AddWithValue(package.Description);
             command.Parameters.AddWithValue(package.Repository);
+            command.Parameters.AddWithValue(package.Folder);
             command.Parameters.AddWithValue(package.License);
             return await command.ExecuteNonQueryAsync() > 0;
         }
@@ -89,8 +91,9 @@ namespace WebApi.Repositories
             Name = reader.GetString(1),
             Description = reader.GetString(2),
             Repository = reader.GetString(3),
-            License = reader.GetString(4),
-            Created = reader.GetFieldValue<DateTime>(5)
+            Folder = reader.GetString(4),
+            License = reader.GetString(5),
+            Created = reader.GetFieldValue<DateTime>(6)
         };
     }
 }
