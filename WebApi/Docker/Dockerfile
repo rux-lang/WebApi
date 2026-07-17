@@ -37,8 +37,8 @@ WORKDIR /home/runner
 # The user's source overwrites Src/Main.rux at run time; Rux.toml is kept.
 RUN rux new template --bin \
  && cd template \
- && printf '[Package]\nName = "playground"\nVersion = "0.1.0"\nType = "bin"\n\n[Dependencies]\nStd = "*"\n' > Rux.toml \
- && printf 'import Std::Io::Print;\n\nfunc Main() -> int {\n\tPrint("Ready");\n\treturn 0;\n}\n' > Src/Main.rux \
+ && printf '[Package]\nName = "playground"\nVersion = "0.1.0"\nType = "bin"\n\n[Dependencies]\nIo = "*"\n' > Rux.toml \
+ && printf 'import Io::Print;\n\nfunc Main() -> int {\n\tPrint("Ready");\n\treturn 0;\n}\n' > Src/Main.rux \
  && rux install \
  && rux build \
  && rux clean

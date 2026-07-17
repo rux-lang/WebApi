@@ -64,7 +64,7 @@ Snippets run in a locked-down, network-isolated Docker sandbox. Both routes take
 
 ```json
 {
-  "code": "import Std::Io::Print;\n\nfunc Main() -> int {\n\tPrint(\"Hello, Rux\");\n\treturn 0;\n}"
+  "code": "import Io::Print;\n\nfunc Main() -> int {\n\tPrint(\"Hello, Rux\");\n\treturn 0;\n}"
 }
 ```
 

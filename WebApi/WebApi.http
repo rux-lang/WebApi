@@ -48,7 +48,7 @@ POST {{WebApi_HostAddress}}/playground/run
 Content-Type: application/json
 
 {
-  "code": "import Std::Io::Print;\n\nfunc Main() -> int {\n    Print(\"Hello, Rux!\")\n}"
+  "code": "import Io::Print;\n\nfunc Main() -> int {\n    Print(\"Hello, Rux!\")\n}"
 }
 
 ###
@@ -58,7 +58,7 @@ POST {{WebApi_HostAddress}}/playground/asm
 Content-Type: application/json
 
 {
-  "code": "import Std::Io::Print;\n\nfunc Main() -> int {\n    Print(\"Hello, Rux!\")\n}"
+  "code": "import Io::Print;\n\nfunc Main() -> int {\n    Print(\"Hello, Rux!\")\n}"
 }
 
 ###
